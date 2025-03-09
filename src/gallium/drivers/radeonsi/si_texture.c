@@ -1172,26 +1172,29 @@ static struct si_texture *si_texture_create_object(struct pipe_screen *screen,
    if (tex->is_depth) {
       tex->htile_stencil_disabled = !tex->surface.has_stencil;
 
+      /* Chips with `has_tc_compat_zrange_bug_without_stencil` must keep stencil enabled because
+       * they can't use Z-only TC-compatible HTILE due to a hw bug. This has only a small effect on
+       * performance because we lose a little bit of Z precision in order to make space for stencil
+       * in HTILE.
+       */
+      if (sscreen->info.has_tc_compat_zrange_bug_without_stencil &&
+          tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE)
+         tex->htile_stencil_disabled = false;
+
       if (sscreen->info.gfx_level >= GFX9) {
          tex->can_sample_z = true;
          tex->can_sample_s = true;
 
          /* Stencil texturing with HTILE doesn't work
           * with mipmapping on Navi10-14. */
-         if (sscreen->info.gfx_level == GFX10 && base->last_level > 0)
+         if (sscreen->info.gfx_level == GFX10 && base->last_level > 0) {
+            assert(!(sscreen->info.has_tc_compat_zrange_bug_without_stencil &&
+                     tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE));
             tex->htile_stencil_disabled = true;
+         }
       } else {
          tex->can_sample_z = !tex->surface.u.legacy.depth_adjusted;
          tex->can_sample_s = !tex->surface.u.legacy.stencil_adjusted;
-
-         /* GFX8 must keep stencil enabled because it can't use Z-only TC-compatible
-          * HTILE because of a hw bug. This has only a small effect on performance
-          * because we lose a little bit of Z precision in order to make space for
-          * stencil in HTILE.
-          */
-         if (sscreen->info.gfx_level == GFX8 &&
-             tex->surface.flags & RADEON_SURF_TC_COMPATIBLE_HTILE)
-            tex->htile_stencil_disabled = false;
       }
 
       tex->db_compatible = surface->flags & RADEON_SURF_ZBUFFER;
@@ -1398,6 +1401,15 @@ si_texture_create_with_modifier(struct pipe_screen *screen,
    bool tc_compatible_htile = is_zs && !is_flushed_depth &&
                               !(sscreen->debug_flags & DBG(NO_HYPERZ)) &&
                               sscreen->info.has_tc_compatible_htile;
+   /* Stencil texturing with HTILE doesn't work with mipmapping on Navi10-14, but on GFX1013 the
+    * depth/stencil HTILE encoding is needed to work around the bug that causes the HTILE depth
+    * range to be updated even for discarded samples in clear tiles, thus possibly changing the
+    * clear value used by TC for the tile.
+    */
+   if (sscreen->info.gfx_level == GFX10 && sscreen->info.has_tc_compat_zrange_bug_without_stencil &&
+       templ->last_level > 0) {
+      tc_compatible_htile = false;
+   }
 
    enum radeon_surf_mode tile_mode = si_choose_tiling(sscreen, templ, tc_compatible_htile);
 
