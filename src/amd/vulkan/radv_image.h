@@ -193,16 +193,20 @@ radv_tc_compat_htile_enabled(const struct radv_image *image, unsigned level)
 static inline bool
 radv_image_tile_stencil_disabled(const struct radv_device *device, const struct radv_image *image)
 {
+   if (vk_format_has_stencil(image->vk.format)) {
+      return false;
+   }
+
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (pdev->info.gfx_level >= GFX9) {
-      return !vk_format_has_stencil(image->vk.format) && !radv_image_has_vrs_htile(device, image);
-   } else {
+   if (pdev->info.has_tc_compat_zrange_bug_without_stencil && radv_image_is_tc_compat_htile(image)) {
       /* Due to a hw bug, TILE_STENCIL_DISABLE must be set to 0 for
        * the TC-compat ZRANGE issue even if no stencil is used.
        */
-      return !vk_format_has_stencil(image->vk.format) && !radv_image_is_tc_compat_htile(image);
+      return false;
    }
+
+   return !radv_image_has_vrs_htile(device, image);
 }
 
 static inline bool
