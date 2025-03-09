@@ -1201,7 +1201,8 @@ ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
     * encoding with the workaround needs to be used for TC-compatible HTILE even if no stencil
     * aspect is present.
     */
-   info->has_tc_compat_zrange_bug_without_stencil = info->gfx_level == GFX8;
+   info->has_tc_compat_zrange_bug_without_stencil = info->gfx_level == GFX8 ||
+                                                    info->family == CHIP_GFX1013;
    info->has_tc_compat_zrange_bug = info->has_tc_compat_zrange_bug_without_stencil ||
                                     info->gfx_level == GFX9;
 
