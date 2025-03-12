@@ -1269,21 +1269,9 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
 
    bool support_aco = aco_is_gpu_supported(&sscreen->info);
 
-#if AMD_LLVM_AVAILABLE
-   /* For GFX11.5, LLVM < 19 is missing a workaround that can cause GPU hangs. ACO is the only
-    * alternative that has the workaround and is always available. Same for GFX12.
-    */
-   if ((sscreen->info.gfx_level == GFX12 && LLVM_VERSION_MAJOR < 20) ||
-       (sscreen->info.gfx_level == GFX11_5 && LLVM_VERSION_MAJOR < 19))
-      sscreen->use_aco = true;
-   else if (sscreen->info.gfx_level >= GFX10)
-      sscreen->use_aco = (sscreen->debug_flags & DBG(USE_ACO));
-   else
-      sscreen->use_aco = support_aco && sscreen->info.has_image_opcodes &&
-                         !(sscreen->debug_flags & DBG(USE_LLVM));
-#else
    sscreen->use_aco = true;
-#endif
+   if(sscreen->debug_flags & DBG(USE_LLVM))
+      sscreen->use_aco = false;
 
    if (sscreen->use_aco && !support_aco) {
       fprintf(stderr, "radeonsi: ACO does not support this chip yet\n");
